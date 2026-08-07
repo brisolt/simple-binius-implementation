@@ -1,5 +1,5 @@
 # Author: Brian Soltani
-# Date: 08/06/2026
+# Date: 08/07/2026
 # Description:
 #   Merkle tree utilities which build a tree from a list of leaf values, get the root as a
 #   commitment, and verify branch proofs that a leaf was part of the committed data.
