@@ -1,4 +1,5 @@
 # Author: Brian Soltani
+# Date: 08/07/2026
 # Description:
 #   A short guided tour of this simple Binius implementation
 
