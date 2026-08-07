@@ -1,5 +1,5 @@
 # Author: Brian Soltani
-# Date: 08/06/2026
+# Date: 08/07/2026
 # Description:
 #   Utilities class for my implementation of a simple Binius, consisting of helper methods.
 
