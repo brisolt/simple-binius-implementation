@@ -1,5 +1,5 @@
 # Author: Brian Soltani
-# Date: 08/06/2026
+# Date: 08/07/2026
 # Description:
 #   The simple Binius prover and verifier. Ties together the field (binary_fields.py), the
 #   polynomial and Reed-Solomon utilities (utils.py), and the Merkle commitment (merkle.py)
