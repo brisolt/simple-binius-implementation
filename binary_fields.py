@@ -3,14 +3,21 @@
 # Description:
 #   binary_fields class for my implementation of a simple Binius.
 
-# Base case: regular multiplication under GF(2). Checks if v1 or v2, which are the values of the two inputs, are 0 or 1.
-# Uses folding and Karatsuba trick to make multiplicaion more efficient.
-# Multiplying (L1 + R1 * X)(L2 + R2 * X) expands to L1L2 + (L1R2 + R1L2)X + R1R2X^2.
-#     -> Tower rule: X^2 reduces to X * X_(k-1) + 1
-#     -> L1L2 is low by low, R1R2_reg is high by high, R1R2_reduced applies tower reduction to R1R2 since it is high
-# 
-def binary_multiplication(v1, v2, length=None):
-    if (v1 < 2 or v2 < 2):
+from __future__ import annotations
+
+from typing import Optional
+
+
+def binary_multiplication(v1: int, v2: int, length: Optional[int] = None) -> int:
+    """
+    Multiplies two binary tower field elements, represented as integers, using the tower's
+    Karatsuba-style folding rule: split each value into a low half L and a high half R
+    (value = L + R*X), then combine as L1*L2 + (L1*R2 + R1*L2)*X + R1*R2*X^2, where X^2
+    reduces via the tower relation X_k^2 = X_k*X_(k-1) + 1.
+
+    Base case is plain integer multiplication for elements of GF(2), i.e. 0 or 1.
+    """
+    if v1 < 2 or v2 < 2:
         return v1 * v2
     if length is None:
         length = 1 << (max(v1, v2).bit_length() - 1).bit_length()
@@ -35,46 +42,47 @@ def binary_multiplication(v1, v2, length=None):
     high_half = cross_term ^ r1r2_reduced
 
     return low_half ^ (high_half << half)
-    # return low_half + high_half[:half_length - len(low_half)]
 
 
 class BinaryFieldElement:
+    """
+    An element of a binary tower field, stored as a non-negative int. Addition is XOR (so
+    every element is its own additive inverse); multiplication follows the tower rule
+    implemented in binary_multiplication.
+    """
 
-    # Constructor class.
-    def __init__(self, value):
+    def __init__(self, value: int) -> None:
+        """Wraps a raw integer as a field element."""
         self.value = value
 
-    # Adding class forcing exclusive OR (XOR) with the ^ bitwise operator. Adding two BinaryFieldElements will apply this XOR
-    # but two non-BFEs will have regular addition in this class.
-    def __add__(self, other):
-
+    def __add__(self, other: BinaryFieldElement | int) -> BinaryFieldElement:
+        """Adds via XOR. A plain int on the right is treated as its raw value."""
         if isinstance(other, BinaryFieldElement):
-            ov = other.value
+            other_value = other.value
         else:
-            ov = other
-        return BinaryFieldElement(self.value ^ ov)
-    __sub__ = __add__ # Makes subtraction and addition the same structure.
+            other_value = other
+        return BinaryFieldElement(self.value ^ other_value)
+
+    __sub__ = __add__  # subtraction is the same as addition in characteristic two
     __radd__ = __add__
     __rsub__ = __add__
 
-    # Printing reformating to make it clear to the reader.
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """Renders as the underlying integer value."""
         return f"{self.value}"
 
-    # Wraps as BinaryFieldElement and calls a recursive multiplication class as a wrapper.
-    def __mul__(self, other): 
+    def __mul__(self, other: BinaryFieldElement | int) -> BinaryFieldElement:
+        """Multiplies via the tower field multiplication rule."""
         if isinstance(other, BinaryFieldElement):
-            ov = other.value
+            other_value = other.value
         else:
-            ov = other
-        return BinaryFieldElement(binary_multiplication(self.value, ov))
-        
-    # Turns regular "**" to the binary-ok version where it recursively brings it down to powers of 0, 1, and 2.
-    def __pow__(self, other):
+            other_value = other
+        return BinaryFieldElement(binary_multiplication(self.value, other_value))
 
+    def __pow__(self, other: int) -> BinaryFieldElement:
+        """Exponentiation by repeated squaring, recursing down to powers of 0, 1, and 2."""
         if other < 0:
-                raise ValueError("Negative exponents are unsupported. Use multiplicative_inverse()")
-
+            raise ValueError("Negative exponents are unsupported. Use multiplicative_inverse()")
 
         if other == 0:
             return BinaryFieldElement(1)
@@ -84,69 +92,49 @@ class BinaryFieldElement:
             return self * self
         else:
             return self.__pow__(other % 2) * self.__pow__(other // 2) ** 2
-            # pow(3, 5) = pow(3, 1) * pow(3, 2) = 3 * 3 = 2 in Binary Field.
+            # pow(3, 5) = pow(3, 1) * pow(3, 2) = 3 * 3 = 2 in the binary field.
 
-    # Checks if two BinaryFieldElements are equal. Preeeetty straightforward.
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        """Compares by underlying value, against another BinaryFieldElement or a raw int."""
         if isinstance(other, BinaryFieldElement):
-            value = other.value
+            other_value = other.value
         else:
-            value = other
-        return self.value == value
+            other_value = other
+        return self.value == other_value
 
-    def __hash__(self):
+    def __hash__(self) -> int:
+        """Hashes by underlying value, so a BinaryFieldElement and the equal raw int hash the same."""
         return hash(self.value)
 
-    def __truediv__(self, other):
+    def __truediv__(self, other: BinaryFieldElement | int) -> BinaryFieldElement:
+        """Divides by multiplying with the multiplicative inverse of other."""
         if isinstance(other, BinaryFieldElement):
-            wrapped = other
+            divisor = other
         else:
-            wrapped = BinaryFieldElement(other)
-        return self * wrapped.multiplicative_inverse()
+            divisor = BinaryFieldElement(other)
+        return self * divisor.multiplicative_inverse()
 
-    # Fermat's little theorem generalizes the inverse as x^(N-2) where N is the size of the smallest sb-field that self.value
-    # lives in. Taking the highest set bit condition (ignoring leading zeros) then rounding to the nearest "tier" of the Binary
-    # tower finds a value 'level' with is the bit-width of the smallest level containing the value. The bit size would be 2^level
-    def multiplicative_inverse(self):
-
+    def multiplicative_inverse(self) -> BinaryFieldElement:
+        """
+        Computes the multiplicative inverse via Fermat's little theorem, x^(N-2), where N is
+        the size of the smallest sub-field of the tower that self.value lives in. The bit
+        length of self.value (rounded up to the nearest tower tier) gives that sub-field's
+        level, and N = 2^(2^level).
+        """
         if self.value == 0:
             raise ZeroDivisionError("No multiplicative inverse")
 
-        first = self.value.bit_length()
-        second = (first - 1).bit_length()
-        level = 2 ** second
-        N = 2 ** level
-        return self ** (N - 2)
+        value_bit_length = self.value.bit_length()
+        tower_level = (value_bit_length - 1).bit_length()
+        subfield_bit_width = 2 ** tower_level
+        field_size = 2 ** subfield_bit_width
+        return self ** (field_size - 2)
 
-    # BinaryFieldElement -> raw bytes so it can be hashed
-    # Careful about length though-?
-    def to_bytes(self, length, byte_order):
+    def to_bytes(self, length: int, byte_order: str) -> bytes:
+        """Serializes the element's value to raw bytes."""
         return self.value.to_bytes(length, byte_order)
 
-    # Reverse of to_bytes- raw bytes -> BinaryFieldElement
     @classmethod
-    def from_bytes(cls, b, byte_order):
+    def from_bytes(cls, b: bytes, byte_order: str) -> BinaryFieldElement:
+        """Deserializes raw bytes back into a BinaryFieldElement."""
         return cls(int.from_bytes(b, byte_order))
-
-# Test driver for each method:
-# def main():
-
-#     a = BinaryFieldElement(3)
-#     b = BinaryFieldElement(5)
-#     c = BinaryFieldElement(13)
-
-#     print(binary_multiplication(3, 3))         # Expected result is 2
-
-#     print(a + b)                                # Expected result is 6  (3 XOR 5)
-
-#     print(a * a)                                # Expected result is 2  (wraps binary_multiplication)
-
-#     print(a ** 5)                               # Expected result is 2
-
-#     print(c.multiplicative_inverse())           # Expected result is 8
-#     print(c * c.multiplicative_inverse())       # Expected result is 1  (sanity check: x * mult_inv(x) == 1)
-
-#     print(BinaryFieldElement(5).to_bytes(2, 'little'))              # Expected result is b'\x05\x00'
-#     print(BinaryFieldElement.from_bytes(b'\x05\x00', 'little'))     # Expected result is 5
-
-# main()

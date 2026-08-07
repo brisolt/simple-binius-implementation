@@ -6,6 +6,7 @@ import copy
 import random
 import sys
 import time
+from typing import Any, Callable
 
 from binary_fields import BinaryFieldElement as B, binary_multiplication
 from merkle import build_merkle, get_root, get_branch, verify_branch
@@ -21,32 +22,38 @@ RESULTS = []
 BOLD, DIM, GREEN, RED, RESET = "\033[1m", "\033[2m", "\033[32m", "\033[31m", "\033[0m"
 
 
-def title(text):
+def title(text: str) -> None:
+    """Prints a top-level title, underlined."""
     print(f"\n{BOLD}{text}{RESET}")
     print("=" * WIDTH)
 
 
-def section(number, text):
+def section(number: int, text: str) -> None:
+    """Prints a numbered section heading."""
     print(f"\n{BOLD}{number}. {text}{RESET}")
     print("-" * WIDTH)
 
 
-def show(label, value):
+def show(label: str, value: Any) -> None:
+    """Prints a label/value pair, aligned."""
     print(f"   {label:<34} {value}")
 
 
-def note(text):
+def note(text: str) -> None:
+    """Prints a dimmed explanatory line."""
     print(f"   {DIM}{text}{RESET}")
 
 
-def check(label, condition):
+def check(label: str, condition: bool) -> None:
+    """Records condition in RESULTS and prints a pass/fail line for it."""
     RESULTS.append(condition)
     mark = f"{GREEN}PASS{RESET}" if condition else f"{RED}FAIL{RESET}"
     print(f"   [{mark}]  {label}")
 
 
 # ------------------------------------------------------------------ 1. field
-def demo_field():
+def demo_field() -> None:
+    """Walks through field addition, multiplication, and inversion, with a couple of sanity checks."""
     section(1, "BINARY TOWER FIELD")
     note("Elements are integers. Addition is XOR, so every element is its own")
     note("negative. Multiplication recurses down the tower with Karatsuba.")
@@ -77,7 +84,8 @@ def demo_field():
 
 
 # ----------------------------------------------------------------- 2. merkle
-def demo_merkle():
+def demo_merkle() -> None:
+    """Commits to a small set of leaves and checks that opening and tamper-detection both work."""
     section(2, "MERKLE COMMITMENT")
     note("Leaves are hashed with a 0x00 prefix and internal nodes with 0x01, so")
     note("no internal node can ever be replayed as a leaf.")
@@ -102,7 +110,8 @@ def demo_merkle():
 
 
 # ------------------------------------------------------- 3. reed-solomon code
-def demo_extend():
+def demo_extend() -> None:
+    """Extends a short row of symbols and checks the extension preserves the originals and stays linear."""
     section(3, "REED-SOLOMON EXTENSION")
     note("Rows are stretched to 8x their length by interpolating a polynomial")
     note("through them and evaluating it further out. Redundancy is what makes")
@@ -129,7 +138,8 @@ def demo_extend():
 
 
 # --------------------------------------------------------------- 4. protocol
-def demo_protocol():
+def demo_protocol() -> dict[str, Any]:
+    """Runs a full commit/prove/verify round on a random multilinear polynomial and returns the proof."""
     section(4, "COMMIT, PROVE, VERIFY")
     note("The prover commits to a multilinear polynomial, then proves what it")
     note("evaluates to at one point without revealing the whole polynomial.")
@@ -139,12 +149,12 @@ def demo_protocol():
     size = 2 ** num_vars
     evaluations = [B(random.randrange(65536)) for _ in range(size)]
     point = [B(random.randrange(65536)) for _ in range(num_vars)]
-    lrl, lrc, rl, rc = choose_row_length_and_count(num_vars)
+    log_row_length, log_row_count, row_length, row_count = choose_row_length_and_count(num_vars)
 
     show("polynomial", f"multilinear, {num_vars} variables")
     show("evaluations on the hypercube", size)
-    show("arranged as a grid", f"{rc} rows x {rl} columns")
-    show("after Reed-Solomon expansion", f"{rc} rows x {rl * EXPANSION_FACTOR} columns")
+    show("arranged as a grid", f"{row_count} rows x {row_length} columns")
+    show("after Reed-Solomon expansion", f"{row_count} rows x {row_length * EXPANSION_FACTOR} columns")
     print()
 
     start = time.time()
@@ -162,7 +172,7 @@ def demo_protocol():
                    + branch_bytes)
 
     show("claimed evaluation", proof["eval"])
-    show("columns opened", f"{len(proof['columns'])} of {rl * EXPANSION_FACTOR}")
+    show("columns opened", f"{len(proof['columns'])} of {row_length * EXPANSION_FACTOR}")
     show("proof size", f"{proof_bytes:,} bytes")
     show("prove / verify time", f"{prove_time:.2f}s / {verify_time:.3f}s")
     print()
@@ -174,13 +184,15 @@ def demo_protocol():
 
 
 # -------------------------------------------------------------- 5. soundness
-def demo_soundness(proof):
+def demo_soundness(proof: dict[str, Any]) -> None:
+    """Mutates a valid proof in several ways and checks verify() rejects every one of them."""
     section(5, "TAMPERING IS CAUGHT")
     note("Every check in verify() returns False rather than asserting, so the")
     note("verifier still rejects when Python runs with -O and strips asserts.")
     print()
 
-    def rejects(label, mutate):
+    def rejects(label: str, mutate: Callable[[dict[str, Any]], Any]) -> None:
+        """Applies mutate to a deep copy of proof and checks verify() rejects the result."""
         forged = copy.deepcopy(proof)
         mutate(forged)
         try:
@@ -201,7 +213,8 @@ def demo_soundness(proof):
                        p.update(branches=p["branches"][::-1])))
 
 
-def main():
+def main() -> int:
+    """Runs the full tour and returns a process exit code: 0 if every check passed, else 1."""
     title("SIMPLE BINIUS  -  a polynomial commitment scheme over binary towers")
     print(f"{DIM}   Brian Soltani{RESET}")
 
